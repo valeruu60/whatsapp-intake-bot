@@ -1,58 +1,42 @@
-import os
  
+import os
 from pyairtable import Api
  
 AIRTABLE_TOKEN = os.environ.get("AIRTABLE_TOKEN", "")
 AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID", "")
-AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE", "Submissions")
+AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE", "Applications")
+ 
+# The Airtable column that holds the applicant's WhatsApp number.
+PHONE_COLUMN = os.environ.get("AIRTABLE_PHONE_COLUMN", "WhatsApp Number")
  
  
-def export_submission(number, profile_name, answers):
+def _table():
+    api = Api(AIRTABLE_TOKEN)
+    return api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLE)
+ 
+ 
+def _digits(s):
+    """Keep only digits, so '+254 712...' and 'whatsapp:+254712...' compare equal."""
+    return "".join(ch for ch in str(s) if ch.isdigit())
+ 
+ 
+def get_status_by_number(number):
     """
-    Create one Airtable record from a finished questionnaire.
-    Returns the new record's id (so we can update its status later).
- 
-    `answers` is a dict like {"legal_name": "...", "title_deed": "uploads/..png"}.
-    For file questions the value is the local file path. Airtable attachment
-    fields need a *public URL*, so in this starter we just record the filename in
-    a text column. In production you'd upload the file to S3 (or similar), then
-    pass {"url": "..."} to an attachment field instead.
+    Find the applicant's record by phone number and return their Status
+    (e.g. 'Accepted', 'Not accepted', 'Under review'). None if not found.
+    Matches on digits so formatting differences don't matter.
     """
     if not (AIRTABLE_TOKEN and AIRTABLE_BASE_ID):
-        print("[airtable] No credentials set; skipping export.")
+        print("[airtable] No credentials set.")
         return None
- 
-    api = Api(AIRTABLE_TOKEN)
-    table = api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLE)
- 
-    # Map our answers onto Airtable fields. Field names here must match the
-    # column names in your base exactly (case-sensitive).
-    fields = {
-        "WhatsApp Number": number.replace("whatsapp:", ""),
-        "Profile Name": profile_name,
-        "Legal Name": answers.get("legal_name", ""),
-        "Date of Birth": answers.get("date_of_birth", ""),
-        "ID Number": answers.get("id_number", ""),
-        "Property Address": answers.get("property_address", ""),
-        "Parcel Number": answers.get("parcel_number", ""),
-        "Transaction Type": answers.get("transaction_type", ""),
-        "Title Deed File": os.path.basename(answers.get("title_deed", "") or ""),
-        "ID Document File": os.path.basename(answers.get("id_document", "") or ""),
-        "Notes": answers.get("notes", ""),
-        "Status": "Under review",
-    }
- 
-    record = table.create(fields)
-    print(f"[airtable] created record {record['id']}")
-    return record["id"]
- 
- 
-def mark_record_status(record_id, status):
-    """Update the Status field of an existing record (e.g. to 'Approved')."""
-    if not (AIRTABLE_TOKEN and AIRTABLE_BASE_ID and record_id):
-        return
-    api = Api(AIRTABLE_TOKEN)
-    table = api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLE)
-    table.update(record_id, {"Status": status})
-    print(f"[airtable] record {record_id} -> {status}")
- 
+    target = _digits(number)
+    try:
+        for rec in _table().all():
+            wa = _digits(rec.get("fields", {}).get(PHONE_COLUMN, ""))
+            if wa and (wa == target or target.endswith(wa) or wa.endswith(target)):
+                return rec["fields"].get("Status")
+        print(f"[airtable] no record found for {number}")
+        return None
+    except Exception as e:
+        print(f"[airtable] get_status_by_number failed: {e}")
+        return None
