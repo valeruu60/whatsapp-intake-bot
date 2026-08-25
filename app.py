@@ -16,7 +16,7 @@ app = Flask(__name__)
 ACCOUNT_SID = os.environ["TWILIO_ACCOUNT_SID"]
 AUTH_TOKEN = os.environ["TWILIO_AUTH_TOKEN"]
 FROM_NUMBER = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
-FORM_URL = os.environ.get("FORM_URL", "https://airtable.com/appRePDHtvRcOx9eZ/pagsLaYB8ib8ol7TW/form")
+FORM_URL = os.environ.get("FORM_URL", "")
  
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
  
